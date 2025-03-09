@@ -453,34 +453,44 @@
     }
     
     // 渲染页面
-    function renderPage(num, keepPosition = false) {
-      const previousScroll = keepPosition ? document.getElementById('canvas-container').scrollTop : 0;
+function renderPage(num, keepPosition = false) {
+  const previousScroll = keepPosition ? document.getElementById('canvas-container').scrollTop : 0;
+  
+  pdfDoc.getPage(num).then(function(page) {
+    // 获取设备像素比
+    const pixelRatio = window.devicePixelRatio || 1;
+    
+    // 使用设备像素比来调整viewport的比例
+    viewport = page.getViewport({ scale: scale * pixelRatio });
+    
+    // 设置canvas的实际尺寸
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    
+    // 使用CSS设置canvas的显示尺寸
+    canvas.style.width = Math.floor(viewport.width / pixelRatio) + "px";
+    canvas.style.height = Math.floor(viewport.height / pixelRatio) + "px";
+    
+    let renderContext = {
+      canvasContext: ctx,
+      viewport: viewport
+    };
+    
+    const renderTask = page.render(renderContext);
+    
+    renderTask.promise.then(() => {
+      document.getElementById('page-num').textContent = num;
+      updateProgress();
       
-      pdfDoc.getPage(num).then(function(page) {
-        viewport = page.getViewport({ scale: scale });
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        
-        let renderContext = {
-          canvasContext: ctx,
-          viewport: viewport
-        };
-        
-        const renderTask = page.render(renderContext);
-        
-        renderTask.promise.then(() => {
-          document.getElementById('page-num').textContent = num;
-          updateProgress();
-          
-          // 保存当前阅读进度到Cookie
-          setCookie('pdfPageNum', num, 30);
-          setCookie('pdfZoom', scale, 30);
-          
-          if (keepPosition) {
-            document.getElementById('canvas-container').scrollTop = previousScroll;
-          }
-        });
-      });
+      // 保存当前阅读进度到Cookie
+      setCookie('pdfPageNum', num, 30);
+      setCookie('pdfZoom', scale, 30);
+      
+      if (keepPosition) {
+        document.getElementById('canvas-container').scrollTop = previousScroll;
+      }
+    });
+  });
     }
     
     // 初始化

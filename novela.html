@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 在线阅读器 - 《冻融的十二月天空》</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <style>
+        :root {
+            /* 默认主题 - 清新蓝调 */
+            --bg-color: #f5f5f5;
+            --header-bg: #2c3e50;
+            --header-text: #ecf0f1;
+            --controls-bg: #ecf0f1;
+            --controls-border: #bdc3c7;
+            --button-bg: #3498db;
+            --button-hover: #2980b9;
+            --text-color: #2c3e50;
+            --canvas-bg: #ffffff;
+            --canvas-shadow: rgba(0, 0, 0, 0.1);
+            --bookmark-bg: #e0e7ee;
+            --notification-bg: #34495e;
+            --notification-text: #ecf0f1;
+            --progress-bg: #ecf0f1;
+            --progress-fill: #3498db;
+            --input-border: #bdc3c7;
+            --input-bg: #ffffff;
+            --input-text: #2c3e50;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            transition: all 0.3s ease;
+        }
+
+        .header {
+            background-color: var(--header-bg);
+            color: var(--header-text);
+            padding: 10px 20px;
+            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        .theme-selector {
+            cursor: pointer;
+            padding: 5px 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            font-size: 0.9rem;
+            border: none;
+            color: var(--header-text);
+            outline: none;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+
+        #canvas-container {
+            flex: 1;
+            overflow: auto;
+            box-shadow: 0 4px 8px var(--canvas-shadow);
+            background-color: var(--canvas-bg);
+            width: 100%;
+            max-height: calc(100vh - 160px);
+            margin: 0;
+        }
+
+        #pdf-canvas {
+            display: block;
+            margin: 0 auto;
+        }
+
+        .controls {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            background-color: var(--controls-bg);
+            border-radius: 4px 4px 0 0;
+            box-shadow: 0 -2px 4px var(--canvas-shadow);
+            z-index: 10;
+        }
+
+        .top-controls {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: var(--controls-bg);
+            border-radius: 0 0 4px 4px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 4px var(--canvas-shadow);
+        }
+
+        .bottom-controls {
+            position: sticky;
+            bottom: 0;
+            width: 100%;
+            background-color: var(--controls-bg);
+            padding: 10px 0;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 -2px 4px var(--canvas-shadow);
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: var(--button-bg);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--button-hover);
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #page-info {
+            margin: 0 10px;
+            color: var(--text-color);
+        }
+
+        select,
+        input {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--input-border);
+            background-color: var(--input-bg);
+            color: var(--input-text);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 5px;
+            background-color: var(--progress-bg);
+            margin-top: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress {
+            height: 100%;
+            background-color: var(--progress-fill);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .bookmark-list {
+            margin-top: 20px;
+            width: 100%;
+            max-width: 800px;
+            padding: 0 20px;
+        }
+
+        .bookmark-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            margin-bottom: 5px;
+            background-color: var(--bookmark-bg);
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .bookmark-item button {
+            padding: 4px 8px;
+            margin-left: 5px;
+        }
+
+        .notification {
+            position: fixed;
+            bottom: 60px;
+            right: 20px;
+            background-color: var(--notification-bg);
+            color: var(--notification-text);
+            padding: 10px 20px;
+            border-radius: 4px;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .nav-button {
+            font-size: 1.5rem;
+            padding: 10px 20px;
+            margin: 0 5px;
+        }
+
+        /* 全屏模式下的样式 */
+        #canvas-container:fullscreen {
+            padding: 20px;
+            background-color: var(--canvas-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+        }
+
+        #canvas-container:-webkit-full-screen {
+            padding: 20px;
+            background-color: var(--canvas-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+        }
+
+        #canvas-container:-moz-full-screen {
+            padding: 20px;
+            background-color: var(--canvas-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+        }
+
+        #canvas-container:-ms-fullscreen {
+            padding: 20px;
+            background-color: var(--canvas-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+        }
+
+        #pdf-canvas {
+            transition: margin 0.3s ease;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+
+            .controls,
+            .top-controls {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            #canvas-container {
+                max-height: calc(100vh - 220px);
+            }
+
+            .nav-button {
+                padding: 10px 15px;
+            }
+
+            .bookmark-list {
+                padding: 0 10px;
+            }
+        }
+
+        /* 主题样式 */
+        /* 夜幕星辰 */
+        .theme-night-sky {
+            --bg-color: #0f2027;
+            --header-bg: #2c5364;
+            --header-text: #ffffff;
+            --controls-bg: #203a43;
+            --controls-border: #1e3c72;
+            --button-bg: #6a82fb;
+            --button-hover: #4361ee;
+            --text-color: #e0e0e0;
+            --canvas-bg: #192734;
+            --canvas-shadow: rgba(0, 0, 0, 0.3);
+            --bookmark-bg: #273c51;
+            --notification-bg: #283e51;
+            --notification-text: #ffffff;
+            --progress-bg: #182848;
+            --progress-fill: #4776e6;
+            --input-border: #283e51;
+            --input-bg: #1c2e40;
+            --input-text: #ffffff;
+        }
+
+        /* 暖阳黄昏 */
+        .theme-sunset {
+            --bg-color: #fceabb;
+            --header-bg: #ef8e38;
+            --header-text: #ffffff;
+            --controls-bg: #f9d9a8;
+            --controls-border: #e6af4b;
+            --button-bg: #f46b45;
+            --button-hover: #e14e41;
+            --text-color: #764a25;
+            --canvas-bg: #fff3e0;
+            --canvas-shadow: rgba(104, 50, 14, 0.1);
+            --bookmark-bg: #ffcc99;
+            --notification-bg: #e0732f;
+            --notification-text: #ffffff;
+            --progress-bg: #f9d9a8;
+            --progress-fill: #f46b45;
+            --input-border: #efb66b;
+            --input-bg: #fff8e8;
+            --input-text: #764a25;
+        }
+
+        /* 森林探幽 */
+        .theme-forest {
+            --bg-color: #e0eadc;
+            --header-bg: #3c612a;
+            --header-text: #ffffff;
+            --controls-bg: #d1e0cc;
+            --controls-border: #95b08e;
+            --button-bg: #468639;
+            --button-hover: #346e2b;
+            --text-color: #2a4c1e;
+            --canvas-bg: #f5f9f3;
+            --canvas-shadow: rgba(38, 77, 30, 0.1);
+            --bookmark-bg: #c4d8bd;
+            --notification-bg: #3c612a;
+            --notification-text: #ffffff;
+            --progress-bg: #d1e0cc;
+            --progress-fill: #468639;
+            --input-border: #a7c09f;
+            --input-bg: #f5f9f3;
+            --input-text: #2a4c1e;
+        }
+
+        /* 雨后薄霭 */
+        .theme-misty {
+            --bg-color: #dfe4ea;
+            --header-bg: #596275;
+            --header-text: #ffffff;
+            --controls-bg: #f1f2f6;
+            --controls-border: #ced6e0;
+            --button-bg: #8395a7;
+            --button-hover: #576574;
+            --text-color: #2f3542;
+            --canvas-bg: #ffffff;
+            --canvas-shadow: rgba(47, 53, 66, 0.1);
+            --bookmark-bg: #e5e9f2;
+            --notification-bg: #596275;
+            --notification-text: #ffffff;
+            --progress-bg: #f1f2f6;
+            --progress-fill: #8395a7;
+            --input-border: #ced6e0;
+            --input-bg: #ffffff;
+            --input-text: #2f3542;
+        }
+
+        /* 樱花飞舞 */
+        .theme-sakura {
+            --bg-color: #fef0f9;
+            --header-bg: #da4167;
+            --header-text: #ffffff;
+            --controls-bg: #fae1ef;
+            --controls-border: #f6a6c1;
+            --button-bg: #da4167;
+            --button-hover: #bd365a;
+            --text-color: #6a2c41;
+            --canvas-bg: #ffffff;
+            --canvas-shadow: rgba(218, 65, 103, 0.1);
+            --bookmark-bg: #fccde2;
+            --notification-bg: #da4167;
+            --notification-text: #ffffff;
+            --progress-bg: #fae1ef;
+            --progress-fill: #da4167;
+            --input-border: #f6a6c1;
+            --input-bg: #ffffff;
+            --input-text: #6a2c41;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>PDF 在线阅读器</h1>
+        <select id="theme-selector" class="theme-selector">
+            <option value="default">清新蓝调</option>
+            <option value="night-sky">夜幕星辰</option>
+            <option value="sunset">暖阳黄昏</option>
+            <option value="forest">森林探幽</option>
+            <option value="misty">雨后薄霭</option>
+            <option value="sakura">樱花飞舞</option>
+        </select>
+    </div>
+
+    <div class="top-controls">
+        <div>
+            <span id="page-info">第 <span id="page-num">1</span> 页 / 共 <span id="page-count">?</span> 页</span>
+        </div>
+        <div>
+            <select id="zoom">
+                <option value="0.5">50%</option>
+                <option value="0.75">75%</option>
+                <option value="1" selected>100%</option>
+                <option value="1.25">125%</option>
+                <option value="1.5">150%</option>
+                <option value="2">200%</option>
+            </select>
+            <input type="number" id="page-input" placeholder="跳转到页码" min="1">
+            <button id="go-page">跳转</button>
+        </div>
+        <div>
+            <button id="add-bookmark">添加书签</button>
+            <button id="fullscreen">全屏</button>
+        </div>
+        <div>
+            <label for="quality-settings">图像优化:</label>
+            <select id="quality-settings">
+                <option value="normal">标准</option>
+                <option value="enhanced">增强文字清晰度</option>
+                <option value="high-contrast">高对比度</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="progress-bar">
+        <div class="progress" id="progress"></div>
+    </div>
+
+    <div class="container">
+        <div id="canvas-container">
+            <canvas id="pdf-canvas"></canvas>
+        </div>
+    </div>
+
+    <div class="bottom-controls">
+        <button id="prev" class="nav-button" disabled>上一页</button>
+        <button id="next" class="nav-button" disabled>下一页</button>
+    </div>
+
+    <div class="bookmark-list" id="bookmark-list">
+        <h3>我的书签</h3>
+        <div id="bookmarks-container"></div>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+    <script>
+        // 配置 PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        // PDF文件路径
+        const pdfUrl = '冻融的十二月天空.pdf';
+
+        let pdfDoc = null;
+        let pageNum = 1;
+        let scale = 1;
+        let canvas = document.getElementById('pdf-canvas');
+        let ctx = canvas.getContext('2d');
+        let viewport = null;
+        let bookmarks = [];
+        let enhancementEnabled = false;
+        let pageCache = new Map();
+        let cacheLimit = 5; // 缓存页数上限
+        let imageWorker = null;
+        let lastPageDirection = 'forward'; // 翻页方向默认向前
+
+
+        // 初始化Worker
+        function initWorker() {
+            const workerScript = document.getElementById('worker').textContent;
+            const blob = new Blob([workerScript], {
+                type: 'text/javascript'
+            });
+            const workerUrl = URL.createObjectURL(blob);
+            imageWorker = new Worker(workerUrl);
+        }
+
+        // 清理函数
+        function cleanupResources() {
+            // 清理超出范围的缓存
+            if (pageCache.size > 0) {
+                for (let key of pageCache.keys()) {
+                    const match = key.match(/page_(\d+)_scale/);
+                    if (match) {
+                        const cachedPage = parseInt(match[1]);
+                        // 清理距离当前页面10页以上的缓存
+                        if (Math.abs(cachedPage - pageNum) > 10) {
+                            pageCache.delete(key);
+                        }
+                    }
+                }
+            }
+
+            // 触发垃圾回收
+            if (window.gc) {
+                try {
+                    window.gc();
+                } catch (e) {
+                    console.log('手动GC失败，浏览器将自动处理');
+                }
+            }
+        }
+
+
+        // 防抖函数
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        }
+
+        // 从Cookie中获取之前的阅读进度
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        }
+
+        // 设置Cookie
+        function setCookie(name, value, days) {
+            const d = new Date();
+            d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+            const expires = `expires=${d.toUTCString()}`;
+            document.cookie = `${name}=${value};${expires};path=/`;
+        }
+
+        // 显示通知
+        function showNotification(message, duration = 3000) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.display = 'block';
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, duration);
+        }
+
+        // 更新进度条
+        function updateProgress() {
+            const progress = document.getElementById('progress');
+            const percentage = (pageNum / pdfDoc.numPages) * 100;
+            progress.style.width = `${percentage}%`;
+        }
+
+        // 预渲染下一页
+        function preRenderNextPage() {
+            // 确定预加载的页面范围
+            const pagesToPreload = [];
+
+            // 始终预加载下一页
+            if (pageNum < pdfDoc.numPages) {
+                pagesToPreload.push(pageNum + 1);
+            }
+
+            // 如果用户阅读方向是向前的，也预加载上一页
+            if (pageNum > 1 && lastPageDirection === 'backward') {
+                pagesToPreload.push(pageNum - 1);
+            }
+
+            // 执行预加载
+            pagesToPreload.forEach(pageToLoad => {
+                // 检查是否已经在缓存中
+                const cacheKey = `page_${pageToLoad}_scale_${scale}`;
+                if (pageCache.has(cacheKey)) {
+                    return; // 已缓存，跳过
+                }
+
+                // 创建临时 canvas 用于预渲染
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+
+                pdfDoc.getPage(pageToLoad).then(function(page) {
+                    const pixelRatio = window.devicePixelRatio || 1;
+                    const tempViewport = page.getViewport({
+                        scale: scale * pixelRatio
+                    });
+
+                    tempCanvas.height = tempViewport.height;
+                    tempCanvas.width = tempViewport.width;
+
+                    const renderContext = {
+                        canvasContext: tempCtx,
+                        viewport: tempViewport
+                    };
+
+                    page.render(renderContext).promise.then(() => {
+                        // 保存到缓存
+                        if (!enhancementEnabled) {
+                            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                            pageCache.set(cacheKey, {
+                                imageData: imageData,
+                                width: tempCanvas.width,
+                                height: tempCanvas.height,
+                                styleWidth: (tempViewport.width / pixelRatio) + "px",
+                                styleHeight: (tempViewport.height / pixelRatio) + "px"
+                            });
+
+                            // 缓存管理
+                            if (pageCache.size > cacheLimit) {
+                                // 找出距离当前页最远的页面删除
+                                let furthestPage = null;
+                                let maxDistance = -1;
+
+                                for (let key of pageCache.keys()) {
+                                    const match = key.match(/page_(\d+)_scale/);
+                                    if (match) {
+                                        const cachedPage = parseInt(match[1]);
+                                        const distance = Math.abs(cachedPage - pageNum);
+
+                                        if (distance > maxDistance) {
+                                            maxDistance = distance;
+                                            furthestPage = key;
+                                        }
+                                    }
+                                }
+
+                                if (furthestPage) {
+                                    pageCache.delete(furthestPage);
+                                }
+                            }
+                        }
+                    });
+                });
+            });
+        }
+
+
+
+
+        // 修改后的renderPage函数
+        function renderPage(num, keepPosition = false) {
+            // 获取当前滚动位置
+            const container = document.getElementById('canvas-container');
+            const previousScroll = keepPosition ? container.scrollTop : 0;
+            const isFullscreen = Boolean(
+                document.fullscreenElement ||
+                document.webkitFullscreenElement ||
+                document.mozFullScreenElement ||
+                document.msFullscreenElement
+            );
+
+            // 检查缓存中是否有当前比例的页面
+            const cacheKey = `page_${num}_scale_${scale}`;
+            if (pageCache.has(cacheKey) && !enhancementEnabled) {
+                // 从缓存中恢复
+                const cachedData = pageCache.get(cacheKey);
+                canvas.width = cachedData.width;
+                canvas.height = cachedData.height;
+                canvas.style.width = cachedData.styleWidth;
+                canvas.style.height = cachedData.styleHeight;
+                ctx.putImageData(cachedData.imageData, 0, 0);
+
+                // 更新UI
+                document.getElementById('page-num').textContent = num;
+                updateProgress();
+
+                // 全屏模式处理
+                if (isFullscreen) {
+                    const containerWidth = container.clientWidth;
+                    const canvasWidth = parseInt(canvas.style.width);
+                    if (canvasWidth < containerWidth) {
+                        canvas.style.marginLeft = Math.floor((containerWidth - canvasWidth) / 2) + "px";
+                    } else {
+                        canvas.style.marginLeft = "0px";
+                    }
+                } else {
+                    canvas.style.marginLeft = "0px";
+                }
+
+                // 恢复滚动位置
+                if (keepPosition) {
+                    setTimeout(() => {
+                        container.scrollTop = previousScroll;
+                    }, 50);
+                }
+
+                return; // 提前返回，避免重新渲染
+            }
+
+            // 原有的渲染逻辑
+            pdfDoc.getPage(num).then(function(page) {
+                // 获取设备像素比
+                const pixelRatio = window.devicePixelRatio || 1;
+
+                // 使用设备像素比来调整viewport的比例
+                viewport = page.getViewport({
+                    scale: scale * pixelRatio
+                });
+
+                // 设置canvas的实际尺寸
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                // 使用CSS设置canvas的显示尺寸
+                canvas.style.width = Math.floor(viewport.width / pixelRatio) + "px";
+                canvas.style.height = Math.floor(viewport.height / pixelRatio) + "px";
+
+                // 全屏模式下的特殊处理
+                if (isFullscreen) {
+                    // 确保canvas适合当前视口
+                    const containerWidth = container.clientWidth;
+                    const containerHeight = container.clientHeight;
+                    const canvasWidth = viewport.width / pixelRatio;
+                    const canvasHeight = viewport.height / pixelRatio;
+
+                    // 确保canvas居中
+                    if (canvasWidth < containerWidth) {
+                        canvas.style.marginLeft = Math.floor((containerWidth - canvasWidth) / 2) + "px";
+                    } else {
+                        canvas.style.marginLeft = "0px";
+                    }
+                } else {
+                    // 非全屏模式重置margin
+                    canvas.style.marginLeft = "0px";
+                }
+
+                let renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+
+                const renderTask = page.render(renderContext);
+
+                renderTask.promise.then(() => {
+                    document.getElementById('page-num').textContent = num;
+                    updateProgress();
+                    // 应用图像增强（如果启用）
+                    if (enhancementEnabled) {
+                        applyImageEnhancement(ctx, canvas.width, canvas.height);
+                    } else {
+                        // 缓存渲染结果
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        pageCache.set(cacheKey, {
+                            imageData: imageData,
+                            width: canvas.width,
+                            height: canvas.height,
+                            styleWidth: canvas.style.width,
+                            styleHeight: canvas.style.height
+                        });
+
+                        // 如果缓存过大，移除最早的条目
+                        if (pageCache.size > cacheLimit) {
+                            const firstKey = pageCache.keys().next().value;
+                            pageCache.delete(firstKey);
+                        }
+                    }
+
+                    // 预渲染下一页（异步）
+                    setTimeout(preRenderNextPage, 300);
+                    // 保存当前阅读进度到Cookie
+                    setCookie('pdfPageNum', num, 30);
+                    setCookie('pdfZoom', scale, 30);
+
+                    // 恢复滚动位置（如果需要）
+                    if (keepPosition) {
+                        setTimeout(() => {
+                            container.scrollTop = previousScroll;
+                        }, 50);
+                    }
+                });
+            });
+        }
+
+        // 图像增强处理函数
+        function applyImageEnhancement(ctx, width, height) {
+            // 如果worker未初始化，则在主线程处理
+            if (!imageWorker) {
+                const imageData = ctx.getImageData(0, 0, width, height);
+                const data = imageData.data;
+
+                // 批量处理像素以提高性能
+                const len = data.length;
+                const batchSize = 10000; // 每批处理的像素数
+
+                for (let i = 0; i < len; i += batchSize) {
+                    const end = Math.min(i + batchSize, len);
+
+                    // 每批次处理像素
+                    for (let j = i; j < end; j += 4) {
+                        // 对比度增强 - 使用位运算提高性能
+                        const r = data[j];
+                        const g = data[j + 1];
+                        const b = data[j + 2];
+
+                        data[j] = r < 128 ? r * 0.9 | 0 : Math.min(255, r * 1.1 | 0);
+                        data[j + 1] = g < 128 ? g * 0.9 | 0 : Math.min(255, g * 1.1 | 0);
+                        data[j + 2] = b < 128 ? b * 0.9 | 0 : Math.min(255, b * 1.1 | 0);
+                    }
+                }
+
+                // 边缘检测和锐化 - 单独的第二遍扫描
+                // 这样可以更好地利用CPU缓存，因为我们按顺序访问数组
+                for (let i = 4; i < len - 4; i += 4) {
+                    const leftR = data[i - 4];
+                    const currentR = data[i];
+                    const rightR = data[i + 4];
+
+                    // 简单的边缘检测
+                    if (Math.abs(leftR - rightR) > 20) {
+                        // 锐化边缘
+                        data[i] = Math.min(255, (currentR * 1.2) | 0);
+                        data[i + 1] = Math.min(255, (data[i + 1] * 1.2) | 0);
+                        data[i + 2] = Math.min(255, (data[i + 2] * 1.2) | 0);
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0)
+                return;
+            }
+
+            // 使用worker处理
+            const imageData = ctx.getImageData(0, 0, width, height);
+
+            imageWorker.onmessage = function(e) {
+                ctx.putImageData(e.data.imageData, 0, 0);
+            };
+
+            imageWorker.postMessage({
+                imageData: imageData
+            });
+
+        }
+
+        // 初始化
+        function init() {
+            pdfjsLib.getDocument(pdfUrl).promise.then(function(doc) {
+                pdfDoc = doc;
+                document.getElementById('page-count').textContent = doc.numPages;
+                document.getElementById('page-input').max = doc.numPages;
+
+                // 从Cookie中恢复阅读位置
+                const savedPage = getCookie('pdfPageNum');
+                const savedZoom = getCookie('pdfZoom');
+
+                if (savedPage && !isNaN(parseInt(savedPage)) && parseInt(savedPage) <= doc.numPages) {
+                    pageNum = parseInt(savedPage);
+                }
+
+                if (savedZoom && !isNaN(parseFloat(savedZoom))) {
+                    scale = parseFloat(savedZoom);
+                    document.getElementById('zoom').value = scale;
+                }
+
+                renderPage(pageNum);
+
+                // 初始化Worker
+                try {
+                    initWorker();
+                } catch (e) {
+                    console.warn('无法初始化Worker，将在主线程处理图像增强', e);
+                }
+
+                // 加载保存的书签
+                loadBookmarks();
+
+                // 每隔一段时间清理资源
+                setInterval(cleanupResources, 300000); // 每5分钟清理一次
+
+                // 启用按钮
+                document.getElementById('prev').disabled = false;
+                // 添加全屏变化事件监听器
+                document.addEventListener('fullscreenchange', handleFullscreenChange);
+                document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+                document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+                document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+                document.getElementById('next').disabled = false;
+            }).catch(error => {
+                console.error('加载PDF出错:', error);
+                showNotification('加载PDF出错: ' + error.message);
+            });
+        }
+
+        // 保存书签
+        function saveBookmarks() {
+            localStorage.setItem('pdfBookmarks', JSON.stringify(bookmarks));
+            renderBookmarks();
+        }
+
+        // 加载书签
+        function loadBookmarks() {
+            const savedBookmarks = localStorage.getItem('pdfBookmarks');
+            if (savedBookmarks) {
+                try {
+                    bookmarks = JSON.parse(savedBookmarks);
+                    renderBookmarks();
+                } catch (e) {
+                    console.error('加载书签出错:', e);
+                    bookmarks = [];
+                }
+            }
+        }
+
+        // 添加书签
+        function addBookmark() {
+            const bookmarkName = prompt('请输入书签名称:', `第 ${pageNum} 页`);
+            if (bookmarkName) {
+                const bookmark = {
+                    name: bookmarkName,
+                    page: pageNum,
+                    zoom: scale,
+                    timestamp: new Date().toISOString()
+                };
+
+                bookmarks.push(bookmark);
+                saveBookmarks();
+                showNotification('书签已添加');
+            }
+        }
+
+        // 修改renderBookmarks函数
+        function renderBookmarks() {
+            const container = document.getElementById('bookmarks-container');
+
+            // 先清空旧内容
+            container.innerHTML = '';
+
+            if (bookmarks.length === 0) {
+                container.innerHTML = '<p>还没有添加书签</p>';
+                return;
+            }
+
+            // 创建文档片段以减少DOM操作
+            const fragment = document.createDocumentFragment();
+
+            bookmarks.forEach((bookmark, index) => {
+                const item = document.createElement('div');
+                item.className = 'bookmark-item';
+                item.dataset.index = index; // 存储索引以便后续操作
+
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = `${bookmark.name} (第 ${bookmark.page} 页)`;
+
+                const buttonContainer = document.createElement('div');
+
+                const gotoButton = document.createElement('button');
+                gotoButton.textContent = '跳转';
+                gotoButton.addEventListener('click', (e) => {
+                    e.stopPropagation(); // 阻止事件冒泡
+                    pageNum = bookmark.page;
+                    scale = bookmark.zoom;
+                    document.getElementById('zoom').value = scale;
+                    renderPage(pageNum);
+                });
+
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = '删除';
+                deleteButton.addEventListener('click', (e) => {
+                    e.stopPropagation(); // 阻止事件冒泡
+                    const bookmarkIndex = parseInt(item.dataset.index);
+                    bookmarks.splice(bookmarkIndex, 1);
+                    saveBookmarks();
+                    // 只移除当前项，无需重新渲染整个列表
+                    item.remove();
+                    if (bookmarks.length === 0) {
+                        container.innerHTML = '<p>还没有添加书签</p>';
+                    }
+                    showNotification('书签已删除');
+                });
+
+                buttonContainer.appendChild(gotoButton);
+                buttonContainer.appendChild(deleteButton);
+
+                item.appendChild(nameSpan);
+                item.appendChild(buttonContainer);
+                fragment.appendChild(item);
+            });
+
+            container.appendChild(fragment);
+        }
+
+
+
+        // 切换主题
+        function setTheme(themeName) {
+            document.body.className = '';
+            if (themeName !== 'default') {
+                document.body.classList.add('theme-' + themeName);
+            }
+            localStorage.setItem('pdfTheme', themeName);
+            showNotification('已切换到「' + document.getElementById('theme-selector').options[document.getElementById('theme-selector').selectedIndex].text + '」主题');
+        }
+
+
+
+        // 全屏模式 - 改进版
+        function toggleFullscreen() {
+            const container = document.getElementById('canvas-container');
+            // 保存当前滚动位置
+            const scrollPos = container.scrollTop;
+
+            if (!document.fullscreenElement &&
+                !document.mozFullScreenElement &&
+                !document.webkitFullscreenElement &&
+                !document.msFullscreenElement) {
+
+                // 进入全屏模式
+                if (container.requestFullscreen) {
+                    container.requestFullscreen();
+                } else if (container.mozRequestFullScreen) {
+                    container.mozRequestFullScreen();
+                } else if (container.webkitRequestFullscreen) {
+                    container.webkitRequestFullscreen();
+                } else if (container.msRequestFullscreen) {
+                    container.msRequestFullscreen();
+                }
+
+                // 显示通知
+                showNotification('已进入全屏模式，按ESC退出');
+            } else {
+                // 退出全屏模式
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+
+                // 显示通知
+                showNotification('已退出全屏模式');
+            }
+        }
+        // 处理全屏变化
+        function handleFullscreenChange() {
+            const container = document.getElementById('canvas-container');
+
+            if (document.fullscreenElement ||
+                document.webkitFullscreenElement ||
+                document.mozFullScreenElement ||
+                document.msFullscreenElement) {
+
+                // 全屏模式下调整缩放以适应屏幕
+                const prevScale = scale;
+                const fullscreenWidth = window.innerWidth;
+                const fullscreenHeight = window.innerHeight;
+
+                // 计算适合的缩放比例
+                if (viewport) {
+                    const pixelRatio = window.devicePixelRatio || 1;
+                    const widthRatio = fullscreenWidth / (viewport.width / pixelRatio);
+                    const heightRatio = fullscreenHeight / (viewport.height / pixelRatio);
+                    const newScale = Math.min(widthRatio, heightRatio) * 0.95; // 留一点边距
+
+                    // 仅当新比例显著不同时更新
+                    if (Math.abs(newScale - scale) > 0.1) {
+                        scale = newScale;
+                        // 记录是自动缩放
+                        container.dataset.autoScaled = 'true';
+                        container.dataset.prevScale = prevScale;
+                    }
+                }
+            } else {
+                // 退出全屏模式时，恢复之前的缩放比例
+                if (container.dataset.autoScaled === 'true') {
+                    scale = parseFloat(container.dataset.prevScale || 1);
+                    container.dataset.autoScaled = 'false';
+
+                    // 更新缩放选择器显示
+                    const zoomSelect = document.getElementById('zoom');
+                    if (Math.abs(scale - 0.5) < 0.1) zoomSelect.value = '0.5';
+                    else if (Math.abs(scale - 0.75) < 0.1) zoomSelect.value = '0.75';
+                    else if (Math.abs(scale - 1) < 0.1) zoomSelect.value = '1';
+                    else if (Math.abs(scale - 1.25) < 0.1) zoomSelect.value = '1.25';
+                    else if (Math.abs(scale - 1.5) < 0.1) zoomSelect.value = '1.5';
+                    else if (Math.abs(scale - 2) < 0.1) zoomSelect.value = '2';
+                }
+            }
+
+            // 300ms 延迟确保浏览器完全应用全屏状态
+            setTimeout(() => {
+                renderPage(pageNum, true);
+            }, 300);
+        }
+        // 事件监听器
+        document.getElementById('prev').addEventListener('click', function() {
+            if (pageNum <= 1) return;
+            pageNum--;
+            lastPageDirection = 'backward';
+            renderPage(pageNum);
+        });
+
+        // 清晰度设置选项的事件监听器
+        document.getElementById('quality-settings').addEventListener('change', function() {
+            const qualityMode = this.value;
+
+            switch (qualityMode) {
+                case 'enhanced':
+                    enhancementEnabled = true;
+                    break;
+                case 'high-contrast':
+                    enhancementEnabled = true;
+                    // 可以设置特定的增强模式
+                    // 你知道安慰剂效应吗？
+                    break;
+                default:
+                    enhancementEnabled = false;
+            }
+
+            // 使用当前设置重新渲染当前页面
+            renderPage(pageNum, true);
+        });
+
+        document.getElementById('next').addEventListener('click', function() {
+            if (pageNum >= pdfDoc.numPages) return;
+            pageNum++;
+            lastPageDirection = 'forward';
+            renderPage(pageNum);
+        });
+
+
+
+        document.getElementById('zoom').addEventListener('change', function() {
+            if (this.value === 'high-quality') {
+                scale = 1.05; // 较高的基础缩放值
+                enhancementEnabled = true;
+            } else {
+                scale = parseFloat(this.value);
+                enhancementEnabled = false;
+            }
+            // 使用防抖函数
+            debouncedRender(pageNum, true);
+        });
+
+        document.getElementById('go-page').addEventListener('click', function() {
+            const input = document.getElementById('page-input');
+            const page = parseInt(input.value);
+
+            if (isNaN(page) || page < 1 || page > pdfDoc.numPages) {
+                showNotification(`请输入1至${pdfDoc.numPages}之间的页码`);
+                return;
+            }
+
+            pageNum = page;
+            renderPage(pageNum);
+        });
+
+        document.getElementById('add-bookmark').addEventListener('click', addBookmark);
+
+        document.getElementById('fullscreen').addEventListener('click', toggleFullscreen);
+
+        document.getElementById('theme-selector').addEventListener('change', function() {
+            setTheme(this.value);
+        });
+
+        // 键盘快捷键
+        document.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'INPUT') return; // 输入框中不触发快捷键
+
+            switch (e.key) {
+                case 'ArrowLeft':
+                    if (pageNum > 1) {
+                        pageNum--;
+                        renderPage(pageNum);
+                    }
+                    break;
+                case 'ArrowRight':
+                    if (pageNum < pdfDoc.numPages) {
+                        pageNum++;
+                        renderPage(pageNum);
+                    }
+                    break;
+                case '+':
+                    scale = Math.min(scale + 0.25, 3);
+                    document.getElementById('zoom').value = scale;
+                    renderPage(pageNum, true);
+                    break;
+                case '-':
+                    scale = Math.max(scale - 0.25, 0.25);
+                    document.getElementById('zoom').value = scale;
+                    renderPage(pageNum, true);
+                    break;
+                case 'f':
+                    toggleFullscreen();
+                    break;
+                case 'Escape':
+                    // ESC 键可以退出全屏，浏览器已处理，这里只用于通知
+                    if (document.fullscreenElement ||
+                        document.webkitFullscreenElement ||
+                        document.mozFullScreenElement ||
+                        document.msFullscreenElement) {
+                        showNotification('已退出全屏模式');
+                    }
+                    break;
+            }
+        });
+
+        // 调整窗口大小时重新渲染以适应屏幕，并且防抖
+        const debouncedRender = debounce((pageNum, keepPosition) => {
+            renderPage(pageNum, keepPosition);
+        }, 300);
+
+        // 恢复保存的主题设置
+        const savedTheme = localStorage.getItem('pdfTheme');
+        if (savedTheme) {
+            document.getElementById('theme-selector').value = savedTheme;
+            setTheme(savedTheme);
+        }
+
+        // 初始化
+        init();
+    </script>
+</body>
+
+</html>
